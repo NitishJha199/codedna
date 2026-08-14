@@ -1,10 +1,22 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     app_name: str = "codedna"
     app_env: str = "development"
     log_level: str = "INFO"
+
+    postgres_host: str = "localhost"
+    postgres_port: int = 5432
+    postgres_db: str = "codedna"
+    postgres_user: str = "codedna"
+    postgres_password: str = ""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
 
 settings = Settings()
