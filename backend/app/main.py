@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from backend.app.api.health import router as health_router
 from backend.app.api.organizations import router as organizations_router
 from backend.app.api.projects import router as projects_router
+from backend.app.api.repositories import router as repositories_router
 
 app = FastAPI(
     title="CodeDNA API",
@@ -12,6 +13,7 @@ app = FastAPI(
 app.include_router(health_router)
 app.include_router(organizations_router)
 app.include_router(projects_router)
+app.include_router(repositories_router)
 
 
 @app.get("/health")
