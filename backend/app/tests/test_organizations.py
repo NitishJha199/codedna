@@ -1,4 +1,4 @@
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import psycopg
 from fastapi.testclient import TestClient
@@ -21,12 +21,14 @@ def get_connection():
 
 
 def test_create_organization():
+    external_id = f"pytest-org-{uuid4()}"
+
     response = client.post(
         "/organizations",
         json={
             "name": "Pytest Organization",
             "provider": "pytest",
-            "external_id": "pytest-org-001",
+            "external_id": external_id,
         },
     )
 
@@ -37,7 +39,7 @@ def test_create_organization():
     UUID(data["id"])
     assert data["name"] == "Pytest Organization"
     assert data["provider"] == "pytest"
-    assert data["external_id"] == "pytest-org-001"
+    assert data["external_id"] == external_id
 
     with get_connection() as connection:
         with connection.cursor() as cursor:
@@ -55,14 +57,16 @@ def test_create_organization():
     assert str(row[0]) == data["id"]
     assert row[1] == "Pytest Organization"
     assert row[2] == "pytest"
-    assert row[3] == "pytest-org-001"
+    assert row[3] == external_id
 
 
 def test_duplicate_organization_returns_conflict():
+    external_id = f"pytest-org-duplicate-{uuid4()}"
+
     payload = {
         "name": "Pytest Duplicate Organization",
         "provider": "pytest",
-        "external_id": "pytest-org-duplicate-001",
+        "external_id": external_id,
     }
 
     first_response = client.post("/organizations", json=payload)
