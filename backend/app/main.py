@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 
 from backend.app.api.builds import router as builds_router
+from backend.app.api.environments import router as environments_router
 from backend.app.api.artifacts import router as artifacts_router
 from backend.app.api.container_images import router as container_images_router
 from backend.app.api.dependencies import router as dependencies_router
@@ -21,6 +22,7 @@ app = FastAPI(
 
 app.include_router(health_router)
 app.include_router(builds_router)
+app.include_router(environments_router)
 app.include_router(artifacts_router)
 app.include_router(container_images_router)
 app.include_router(dependencies_router)
