@@ -8,6 +8,7 @@ from backend.app.api.dependencies import router as dependencies_router
 from backend.app.api.security_findings import router as security_findings_router
 from backend.app.api.services import router as services_router
 from backend.app.api.sboms import router as sboms_router
+from backend.app.api.vulnerabilities import router as vulnerabilities_router
 from backend.app.api.deployments import router as deployments_router
 from backend.app.api.commits import router as commits_router
 from backend.app.api.developers import router as developers_router
@@ -32,6 +33,7 @@ app.include_router(dependencies_router)
 app.include_router(security_findings_router)
 app.include_router(services_router)
 app.include_router(sboms_router)
+app.include_router(vulnerabilities_router)
 app.include_router(deployments_router)
 app.include_router(commits_router)
 app.include_router(developers_router)
