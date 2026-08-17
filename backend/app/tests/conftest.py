@@ -24,6 +24,11 @@ def cleanup_pytest_data():
             """)
 
             cur.execute("""
+                DELETE FROM vulnerabilities
+                WHERE provider = 'pytest'
+            """)
+
+            cur.execute("""
                 DELETE FROM services
                 WHERE provider = 'pytest'
             """)
@@ -40,6 +45,11 @@ def cleanup_pytest_data():
 
             cur.execute("""
                 DELETE FROM artifacts
+                WHERE provider = 'pytest'
+            """)
+
+            cur.execute("""
+                DELETE FROM events
                 WHERE provider = 'pytest'
             """)
 
