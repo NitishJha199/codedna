@@ -775,3 +775,189 @@ def project_runtime_graph(
     result["deployments"] = project_deployments(postgres, neo4j)
 
     return result
+
+
+DEPENDENCY_QUERY = """
+    SELECT
+        id,
+        repository_id,
+        name,
+        version,
+        package_manager,
+        provider,
+        external_id
+    FROM dependencies
+"""
+
+VULNERABILITY_QUERY = """
+    SELECT
+        id,
+        provider,
+        external_id,
+        identifier,
+        severity,
+        summary,
+        description,
+        published_at,
+        modified_at
+    FROM vulnerabilities
+"""
+
+SECURITY_FINDING_QUERY = """
+    SELECT
+        id,
+        repository_id,
+        dependency_id,
+        vulnerability_id,
+        provider,
+        external_id,
+        finding_type,
+        severity,
+        status,
+        title,
+        description,
+        detected_at,
+        resolved_at
+    FROM security_findings
+"""
+
+
+def project_dependencies(
+    postgres: Connection,
+    neo4j: Driver,
+) -> int:
+    with postgres.cursor() as cursor:
+        cursor.execute(DEPENDENCY_QUERY)
+        rows = cursor.fetchall()
+
+    with neo4j.session() as session:
+        for row in rows:
+            session.run(
+                """
+                MERGE (n:Dependency {id: $id})
+                SET n.name = $name,
+                    n.version = $version,
+                    n.package_manager = $package_manager,
+                    n.provider = $provider,
+                    n.external_id = $external_id
+
+                WITH n
+                MATCH (r:Repository {id: $repository_id})
+                MERGE (r)-[:HAS_DEPENDENCY]->(n)
+                """,
+                id=str(row[0]),
+                repository_id=str(row[1]),
+                name=row[2],
+                version=row[3],
+                package_manager=row[4],
+                provider=row[5],
+                external_id=row[6],
+            ).consume()
+
+    return len(rows)
+
+
+def project_vulnerabilities(
+    postgres: Connection,
+    neo4j: Driver,
+) -> int:
+    with postgres.cursor() as cursor:
+        cursor.execute(VULNERABILITY_QUERY)
+        rows = cursor.fetchall()
+
+    with neo4j.session() as session:
+        for row in rows:
+            session.run(
+                """
+                MERGE (n:Vulnerability {id: $id})
+                SET n.provider = $provider,
+                    n.external_id = $external_id,
+                    n.identifier = $identifier,
+                    n.severity = $severity,
+                    n.summary = $summary,
+                    n.description = $description,
+                    n.published_at = $published_at,
+                    n.modified_at = $modified_at
+                """,
+                id=str(row[0]),
+                provider=row[1],
+                external_id=row[2],
+                identifier=row[3],
+                severity=row[4],
+                summary=row[5],
+                description=row[6],
+                published_at=row[7],
+                modified_at=row[8],
+            ).consume()
+
+    return len(rows)
+
+
+def project_security_findings(
+    postgres: Connection,
+    neo4j: Driver,
+) -> int:
+    with postgres.cursor() as cursor:
+        cursor.execute(SECURITY_FINDING_QUERY)
+        rows = cursor.fetchall()
+
+    with neo4j.session() as session:
+        for row in rows:
+            session.run(
+                """
+                MERGE (n:SecurityFinding {id: $id})
+                SET n.provider = $provider,
+                    n.external_id = $external_id,
+                    n.finding_type = $finding_type,
+                    n.severity = $severity,
+                    n.status = $status,
+                    n.title = $title,
+                    n.description = $description,
+                    n.detected_at = $detected_at,
+                    n.resolved_at = $resolved_at
+
+                WITH n
+                MATCH (r:Repository {id: $repository_id})
+                MERGE (r)-[:HAS_SECURITY_FINDING]->(n)
+
+                WITH n
+                OPTIONAL MATCH (d:Dependency {id: $dependency_id})
+                FOREACH (_ IN CASE WHEN d IS NULL THEN [] ELSE [1] END |
+                    MERGE (n)-[:AFFECTS_DEPENDENCY]->(d)
+                )
+
+                WITH n
+                OPTIONAL MATCH (v:Vulnerability {id: $vulnerability_id})
+                FOREACH (_ IN CASE WHEN v IS NULL THEN [] ELSE [1] END |
+                    MERGE (n)-[:IDENTIFIES_VULNERABILITY]->(v)
+                )
+                """,
+                id=str(row[0]),
+                repository_id=str(row[1]),
+                dependency_id=str(row[2]) if row[2] else None,
+                vulnerability_id=str(row[3]) if row[3] else None,
+                provider=row[4],
+                external_id=row[5],
+                finding_type=row[6],
+                severity=row[7],
+                status=row[8],
+                title=row[9],
+                description=row[10],
+                detected_at=row[11],
+                resolved_at=row[12],
+            ).consume()
+
+    return len(rows)
+
+
+def project_security_graph(
+    postgres: Connection,
+    neo4j: Driver,
+) -> dict[str, int]:
+    result = project_runtime_graph(postgres, neo4j)
+
+    result["dependencies"] = project_dependencies(postgres, neo4j)
+    result["vulnerabilities"] = project_vulnerabilities(postgres, neo4j)
+    result["security_findings"] = project_security_findings(postgres, neo4j)
+
+    return result

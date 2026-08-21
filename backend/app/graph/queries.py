@@ -81,3 +81,71 @@ def get_deployment_lineage(deployment_id: str) -> dict[str, Any] | None:
             }
     finally:
         driver.close()
+
+
+def get_vulnerability_impact(vulnerability_id: str) -> dict[str, Any] | None:
+    query = """
+    MATCH (v:Vulnerability {id: $vulnerability_id})
+    OPTIONAL MATCH (f:SecurityFinding)-[:IDENTIFIES_VULNERABILITY]->(v)
+    OPTIONAL MATCH (repo:Repository)-[:HAS_SECURITY_FINDING]->(f)
+    OPTIONAL MATCH (f)-[:AFFECTS_DEPENDENCY]->(dep:Dependency)
+    OPTIONAL MATCH (repo)-[:HAS_ARTIFACT]->(art:Artifact)
+    OPTIONAL MATCH (art)-[:HAS_DEPLOYMENT]->(d:Deployment)
+    OPTIONAL MATCH (d)-[:DEPLOYS]->(svc:Service)
+    OPTIONAL MATCH (d)-[:DEPLOYED_TO]->(env:Environment)
+    RETURN
+        {
+            id: v.id,
+            identifier: v.identifier,
+            severity: v.severity,
+            summary: v.summary
+        } AS vulnerability,
+        collect(DISTINCT CASE WHEN f IS NOT NULL THEN {
+            id: f.id,
+            title: f.title,
+            severity: f.severity,
+            status: f.status
+        } ELSE null END) AS findings,
+        collect(DISTINCT CASE WHEN dep IS NOT NULL THEN {
+            id: dep.id,
+            name: dep.name,
+            version: dep.version
+        } ELSE null END) AS affected_dependencies,
+        collect(DISTINCT CASE WHEN repo IS NOT NULL THEN {
+            id: repo.id,
+            name: repo.name
+        } ELSE null END) AS repositories,
+        collect(DISTINCT CASE WHEN svc IS NOT NULL THEN {
+            id: svc.id,
+            name: svc.name
+        } ELSE null END) AS services,
+        collect(DISTINCT CASE WHEN env IS NOT NULL THEN {
+            id: env.id,
+            name: env.name,
+            environment_type: env.environment_type
+        } ELSE null END) AS environments
+    """
+    driver = get_driver()
+    try:
+        with driver.session() as session:
+            result = session.run(query, vulnerability_id=vulnerability_id)
+            record = result.single()
+            if not record or not record["vulnerability"] or not record["vulnerability"]["id"]:
+                return None
+
+            clean_findings = [f for f in record["findings"] if f]
+            clean_deps = [d for d in record["affected_dependencies"] if d]
+            clean_repos = [r for r in record["repositories"] if r]
+            clean_svcs = [s for s in record["services"] if s]
+            clean_envs = [e for e in record["environments"] if e]
+
+            return {
+                "vulnerability": record["vulnerability"],
+                "findings": clean_findings,
+                "affected_dependencies": clean_deps,
+                "repositories": clean_repos,
+                "services": clean_svcs,
+                "environments": clean_envs,
+            }
+    finally:
+        driver.close()
