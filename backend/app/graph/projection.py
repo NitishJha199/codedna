@@ -17,6 +17,193 @@ REPOSITORY_QUERY = """
     FROM repositories
 """
 
+DEVELOPER_QUERY = """
+    SELECT
+        id,
+        organization_id,
+        username,
+        display_name,
+        email,
+        provider,
+        external_id
+    FROM developers
+"""
+
+COMMIT_QUERY = """
+    SELECT
+        id,
+        repository_id,
+        developer_id,
+        provider,
+        external_id,
+        sha,
+        message,
+        occurred_at
+    FROM commits
+"""
+
+PULL_REQUEST_QUERY = """
+    SELECT
+        id,
+        repository_id,
+        author_id,
+        provider,
+        external_id,
+        number,
+        title,
+        state,
+        source_branch,
+        target_branch,
+        created_at
+    FROM pull_requests
+"""
+
+PIPELINE_QUERY = """
+    SELECT
+        id,
+        repository_id,
+        provider,
+        external_id,
+        name,
+        status,
+        branch,
+        commit_id,
+        started_at,
+        finished_at
+    FROM pipelines
+"""
+
+BUILD_QUERY = """
+    SELECT
+        id,
+        pipeline_id,
+        commit_id,
+        provider,
+        external_id,
+        status,
+        started_at,
+        finished_at
+    FROM builds
+"""
+
+ARTIFACT_QUERY = """
+    SELECT
+        id,
+        build_id,
+        repository_id,
+        provider,
+        external_id,
+        name,
+        version,
+        artifact_type,
+        digest
+    FROM artifacts
+"""
+
+CONTAINER_IMAGE_QUERY = """
+    SELECT
+        id,
+        artifact_id,
+        repository_id,
+        registry,
+        image_name,
+        tag,
+        digest
+    FROM container_images
+"""
+
+SBOM_QUERY = """
+    SELECT
+        id,
+        artifact_id,
+        container_image_id,
+        format,
+        version,
+        digest,
+        generated_at,
+        payload
+    FROM sboms
+"""
+
+ENVIRONMENT_QUERY = """
+    SELECT
+        id,
+        organization_id,
+        name,
+        environment_type,
+        provider,
+        external_id
+    FROM environments
+"""
+
+SERVICE_QUERY = """
+    SELECT
+        id,
+        organization_id,
+        name,
+        provider,
+        external_id
+    FROM services
+"""
+
+DEPLOYMENT_QUERY = """
+    SELECT
+        id,
+        environment_id,
+        service_id,
+        artifact_id,
+        container_image_id,
+        provider,
+        external_id,
+        status,
+        deployed_at
+    FROM deployments
+"""
+
+DEPENDENCY_QUERY = """
+    SELECT
+        id,
+        repository_id,
+        name,
+        version,
+        package_manager,
+        provider,
+        external_id
+    FROM dependencies
+"""
+
+VULNERABILITY_QUERY = """
+    SELECT
+        id,
+        provider,
+        external_id,
+        identifier,
+        severity,
+        summary,
+        description,
+        published_at,
+        modified_at
+    FROM vulnerabilities
+"""
+
+SECURITY_FINDING_QUERY = """
+    SELECT
+        id,
+        repository_id,
+        dependency_id,
+        vulnerability_id,
+        provider,
+        external_id,
+        finding_type,
+        severity,
+        status,
+        title,
+        description,
+        detected_at,
+        resolved_at
+    FROM security_findings
+"""
+
 
 def project_organizations(
     postgres: Connection,
@@ -123,34 +310,41 @@ def project_core_graph(
     }
 
 
-COMMIT_QUERY = """
-    SELECT
-        id,
-        repository_id,
-        developer_id,
-        provider,
-        external_id,
-        sha,
-        message,
-        occurred_at
-    FROM commits
-"""
+def project_developers(
+    postgres: Connection,
+    neo4j: Driver,
+) -> int:
+    with postgres.cursor() as cursor:
+        cursor.execute(DEVELOPER_QUERY)
+        rows = cursor.fetchall()
 
-PULL_REQUEST_QUERY = """
-    SELECT
-        id,
-        repository_id,
-        author_id,
-        provider,
-        external_id,
-        number,
-        title,
-        state,
-        source_branch,
-        target_branch,
-        created_at
-    FROM pull_requests
-"""
+    with neo4j.session() as session:
+        for row in rows:
+            session.run(
+                """
+                MERGE (n:Developer {id: $id})
+                SET n.username = $username,
+                    n.display_name = $display_name,
+                    n.email = $email,
+                    n.provider = $provider,
+                    n.external_id = $external_id
+
+                WITH n
+                OPTIONAL MATCH (o:Organization {id: $organization_id})
+                FOREACH (_ IN CASE WHEN o IS NULL THEN [] ELSE [1] END |
+                    MERGE (o)-[:HAS_MEMBER]->(n)
+                )
+                """,
+                id=str(row[0]),
+                organization_id=str(row[1]) if row[1] else None,
+                username=row[2],
+                display_name=row[3],
+                email=row[4],
+                provider=row[5],
+                external_id=row[6],
+            ).consume()
+
+    return len(rows)
 
 
 def project_commits(
@@ -255,78 +449,11 @@ def project_source_graph(
 ) -> dict[str, int]:
     result = project_core_graph(postgres, neo4j)
 
+    result["developers"] = project_developers(postgres, neo4j)
     result["commits"] = project_commits(postgres, neo4j)
     result["pull_requests"] = project_pull_requests(postgres, neo4j)
 
     return result
-
-
-PIPELINE_QUERY = """
-    SELECT
-        id,
-        repository_id,
-        provider,
-        external_id,
-        name,
-        status,
-        branch,
-        commit_id,
-        started_at,
-        finished_at
-    FROM pipelines
-"""
-
-BUILD_QUERY = """
-    SELECT
-        id,
-        pipeline_id,
-        commit_id,
-        provider,
-        external_id,
-        status,
-        started_at,
-        finished_at
-    FROM builds
-"""
-
-ARTIFACT_QUERY = """
-    SELECT
-        id,
-        build_id,
-        repository_id,
-        provider,
-        external_id,
-        name,
-        version,
-        artifact_type,
-        digest
-    FROM artifacts
-"""
-
-CONTAINER_IMAGE_QUERY = """
-    SELECT
-        id,
-        artifact_id,
-        repository_id,
-        registry,
-        image_name,
-        tag,
-        digest
-    FROM container_images
-"""
-
-SBOM_QUERY = """
-    SELECT
-        id,
-        artifact_id,
-        container_image_id,
-        format,
-        version,
-        digest,
-        generated_at,
-        payload
-    FROM sboms
-"""
 
 
 def project_pipelines(
@@ -586,42 +713,6 @@ def project_delivery_graph(
     return result
 
 
-ENVIRONMENT_QUERY = """
-    SELECT
-        id,
-        organization_id,
-        name,
-        environment_type,
-        provider,
-        external_id
-    FROM environments
-"""
-
-SERVICE_QUERY = """
-    SELECT
-        id,
-        organization_id,
-        name,
-        provider,
-        external_id
-    FROM services
-"""
-
-DEPLOYMENT_QUERY = """
-    SELECT
-        id,
-        environment_id,
-        service_id,
-        artifact_id,
-        container_image_id,
-        provider,
-        external_id,
-        status,
-        deployed_at
-    FROM deployments
-"""
-
-
 def project_environments(
     postgres: Connection,
     neo4j: Driver,
@@ -775,51 +866,6 @@ def project_runtime_graph(
     result["deployments"] = project_deployments(postgres, neo4j)
 
     return result
-
-
-DEPENDENCY_QUERY = """
-    SELECT
-        id,
-        repository_id,
-        name,
-        version,
-        package_manager,
-        provider,
-        external_id
-    FROM dependencies
-"""
-
-VULNERABILITY_QUERY = """
-    SELECT
-        id,
-        provider,
-        external_id,
-        identifier,
-        severity,
-        summary,
-        description,
-        published_at,
-        modified_at
-    FROM vulnerabilities
-"""
-
-SECURITY_FINDING_QUERY = """
-    SELECT
-        id,
-        repository_id,
-        dependency_id,
-        vulnerability_id,
-        provider,
-        external_id,
-        finding_type,
-        severity,
-        status,
-        title,
-        description,
-        detected_at,
-        resolved_at
-    FROM security_findings
-"""
 
 
 def project_dependencies(

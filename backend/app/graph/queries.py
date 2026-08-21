@@ -149,3 +149,63 @@ def get_vulnerability_impact(vulnerability_id: str) -> dict[str, Any] | None:
             }
     finally:
         driver.close()
+
+
+def get_developer_impact(developer_id: str) -> dict[str, Any] | None:
+    query = """
+    MATCH (dev:Developer {id: $developer_id})
+    OPTIONAL MATCH (c:Commit)-[:AUTHORED_BY]->(dev)
+    OPTIONAL MATCH (repo:Repository)-[:HAS_COMMIT]->(c)
+    OPTIONAL MATCH (b:Build)-[:BUILDS_FROM]->(c)
+    OPTIONAL MATCH (b)-[:PRODUCES]->(art:Artifact)
+    OPTIONAL MATCH (art)-[:HAS_DEPLOYMENT]->(d:Deployment)
+    OPTIONAL MATCH (d)-[:DEPLOYS]->(svc:Service)
+    OPTIONAL MATCH (d)-[:DEPLOYED_TO]->(env:Environment)
+    RETURN
+        {
+            id: dev.id,
+            username: dev.username,
+            display_name: dev.display_name,
+            email: dev.email
+        } AS developer,
+        collect(DISTINCT CASE WHEN c IS NOT NULL THEN {
+            id: c.id,
+            sha: c.sha,
+            message: c.message
+        } ELSE null END) AS commits,
+        collect(DISTINCT CASE WHEN repo IS NOT NULL THEN {
+            id: repo.id,
+            name: repo.name
+        } ELSE null END) AS repositories,
+        collect(DISTINCT CASE WHEN svc IS NOT NULL THEN {
+            id: svc.id,
+            name: svc.name
+        } ELSE null END) AS deployed_services,
+        collect(DISTINCT CASE WHEN env IS NOT NULL THEN {
+            id: env.id,
+            name: env.name,
+            environment_type: env.environment_type
+        } ELSE null END) AS environments
+    """
+    driver = get_driver()
+    try:
+        with driver.session() as session:
+            result = session.run(query, developer_id=developer_id)
+            record = result.single()
+            if not record or not record["developer"] or not record["developer"]["id"]:
+                return None
+
+            clean_commits = [c for c in record["commits"] if c]
+            clean_repos = [r for r in record["repositories"] if r]
+            clean_svcs = [s for s in record["deployed_services"] if s]
+            clean_envs = [e for e in record["environments"] if e]
+
+            return {
+                "developer": record["developer"],
+                "commits": clean_commits,
+                "repositories": clean_repos,
+                "deployed_services": clean_svcs,
+                "environments": clean_envs,
+            }
+    finally:
+        driver.close()
