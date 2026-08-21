@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     neo4j_user: str = "neo4j"
     neo4j_password: str = ""
 
+    github_webhook_secret: str = "dev-github-secret"
+    gitlab_webhook_secret: str = "dev-gitlab-secret"
+    pagerduty_webhook_secret: str = "dev-pagerduty-secret"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
