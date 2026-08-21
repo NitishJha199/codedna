@@ -25,10 +25,13 @@ def dora_fixture():
     artifact_id = str(uuid.uuid4())
     dep_success_id = str(uuid.uuid4())
     dep_failed_id = str(uuid.uuid4())
+    incident_id = str(uuid.uuid4())
 
     now = datetime.now(timezone.utc)
     commit_time = now - timedelta(hours=2)
     deploy_time = now - timedelta(hours=1)
+    inc_start = now - timedelta(minutes=45)
+    inc_resolved = now - timedelta(minutes=15)
 
     with get_connection() as conn:
         with conn.cursor(row_factory=dict_row) as cur:
@@ -127,6 +130,19 @@ def dora_fixture():
                 """,
                 (dep_failed_id, env_id, service_id, artifact_id, f"dep-f-{run_id}", now),
             )
+
+            # Incident resolved after 30 minutes (1800s)
+            cur.execute(
+                """
+                INSERT INTO incidents (
+                    id, organization_id, service_id, environment_id, deployment_id,
+                    provider, external_id, title, severity, status,
+                    started_at, resolved_at
+                )
+                VALUES (%s, %s, %s, %s, %s, 'pagerduty', %s, 'Outage in API', 'SEV-1', 'resolved', %s, %s)
+                """,
+                (incident_id, org_id, service_id, env_id, dep_failed_id, f"inc-{run_id}", inc_start, inc_resolved),
+            )
         conn.commit()
 
     yield {
@@ -154,4 +170,6 @@ def test_dora_metrics_calculation(dora_fixture):
     assert data["deployments"]["failed"] == 1
     assert data["change_failure_rate"]["rate_percentage"] == 50.0
     assert data["lead_time_for_changes"]["avg_lead_time_seconds"] is not None
-    assert data["lead_time_for_changes"]["avg_lead_time_seconds"] > 0
+    assert data["mean_time_to_restore"]["total_incidents"] == 1
+    assert data["mean_time_to_restore"]["resolved_incidents"] == 1
+    assert data["mean_time_to_restore"]["avg_recovery_minutes"] == 30.0

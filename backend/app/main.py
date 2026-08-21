@@ -1,3 +1,4 @@
+from backend.app.api.incidents import router as incidents_router
 from backend.app.api.metrics import router as metrics_router
 from fastapi import FastAPI
 
@@ -56,3 +57,5 @@ app.include_router(pull_requests_router)
 app.include_router(lineage_router)
 
 app.include_router(metrics_router)
+
+app.include_router(incidents_router)
