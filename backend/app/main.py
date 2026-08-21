@@ -1,3 +1,4 @@
+from backend.app.api.metrics import router as metrics_router
 from fastapi import FastAPI
 
 from backend.app.api.health import router as health_router
@@ -53,3 +54,5 @@ app.include_router(developers_router)
 app.include_router(environments_router)
 app.include_router(pull_requests_router)
 app.include_router(lineage_router)
+
+app.include_router(metrics_router)
