@@ -1,3 +1,4 @@
+from backend.app.events.processor import process_pending_events
 from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
@@ -118,3 +119,11 @@ def create_event(
         error_message=row[8],
         payload=row[9],
     )
+
+
+@router.post("/process-pending")
+def process_pending(
+    batch_size: int = 50,
+    connection: Connection = Depends(connection_dependency),
+) -> dict[str, int]:
+    return process_pending_events(connection, batch_size=batch_size, sync_graph=True)
